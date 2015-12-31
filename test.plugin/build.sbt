@@ -48,20 +48,23 @@ publishMavenStyle := true
 // do not include all repositories in the POM
 pomAllRepositories := false
 
-makePom := {
-  val old = makePom.value
-  val pom = xml.XML.loadFile(old)
-  val additionalProperties =
-    (<git.branch>{git.gitCurrentBranch.value}</git.branch>
-      <git.commit>{git.gitHeadCommit.value.getOrElse("N/A")+(if (git.gitUncommittedChanges.value) "-SNAPSHOT" else "")}</git.commit>
-      <git.tags>{git.gitCurrentTags.value}</git.tags>)
-  val newPom = pom.copy(child = pom.child.toSeq map {
-    case elem: xml.Elem if elem.label == "properties" =>
-      elem.copy(child = elem.child ++ additionalProperties)
-    case x => x
+lazy val additionalProperties = settingKey[Seq[xml.Node]]("Additional entries for the POM's <properties> section")
+
+additionalProperties :=
+  <git.branch>{git.gitCurrentBranch.value}</git.branch>
+  <git.commit>{git.gitHeadCommit.value.getOrElse("N/A")+(if (git.gitUncommittedChanges.value) "-SNAPSHOT" else "")}</git.commit>
+  <git.tags>{git.gitCurrentTags.value}</git.tags>
+
+pomPostProcess <<= (additionalProperties) { (additions) =>
+  new xml.transform.RuleTransformer(new xml.transform.RewriteRule {
+    override def transform(n: xml.Node): Seq[xml.Node] =
+      n match {
+        case ps: xml.Elem if ps.label == "properties" =>
+	  ps.copy(child=ps.child ++ additions)
+        case _ =>
+          n
+     }
   })
-  xml.XML.save(old.toString, newPom, enc = "UTF-8", xmlDecl = true)
-  old
 }
 
 resolvers += new MavenCache("Local Test", baseDirectory.value.getParentFile / "local.repo")
