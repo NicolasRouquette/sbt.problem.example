@@ -48,13 +48,22 @@ publishMavenStyle := true
 // do not include all repositories in the POM
 pomAllRepositories := false
 
-pomExtra :=
-  <properties>
-    <git.branch>{git.gitCurrentBranch.value}</git.branch>
-    <git.commit>{git.gitHeadCommit.value.getOrElse("N/A")+(if (git.gitUncommittedChanges.value) "-SNAPSHOT" else "")}</git.commit>
-    <git.tags>{git.gitCurrentTags.value}</git.tags>
-  </properties>
+makePom := {
+  val old = makePom.value
+  val pom = xml.XML.loadFile(old)
+  val additionalProperties =
+    (<git.branch>{git.gitCurrentBranch.value}</git.branch>
+      <git.commit>{git.gitHeadCommit.value.getOrElse("N/A")+(if (git.gitUncommittedChanges.value) "-SNAPSHOT" else "")}</git.commit>
+      <git.tags>{git.gitCurrentTags.value}</git.tags>)
+  val newPom = pom.copy(child = pom.child.toSeq map {
+    case elem: xml.Elem if elem.label == "properties" =>
+      elem.copy(child = elem.child ++ additionalProperties)
+    case x => x
+  })
+  xml.XML.save(old.toString, newPom, enc = "UTF-8", xmlDecl = true)
+  old
+}
 
-resolvers += new MavenCache("Local Test", baseDirectory.value / ".." / "local.repo")
+resolvers += new MavenCache("Local Test", baseDirectory.value.getParentFile / "local.repo")
 
-publishTo := Some(new MavenCache("Local Test", baseDirectory.value / ".." / "local.repo"))
+publishTo := Some(new MavenCache("Local Test", baseDirectory.value.getParentFile / "local.repo"))
